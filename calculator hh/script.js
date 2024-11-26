@@ -26,6 +26,7 @@ function updateDisplay(text) {
     const currentDisplay = displayScreen.innerText.replace('|', '');
     const lastChar = currentDisplay[currentDisplay.length - 1];
 
+
     // Handle percentage button logic
     if (text === '%') {
         // Cannot add percentage if display is empty
@@ -47,11 +48,54 @@ function updateDisplay(text) {
         return;
     }
 
-    // Handle numbers after percentage
-    if (isNumber(text) && lastChar === '%') {
+    // Handle numbers or zero after percentage
+    if ((isNumber(text) || text === '0') && lastChar === '%') {
         displayScreen.innerHTML = currentDisplay + '×' + text + cursor.outerHTML;
         return;
     }
+
+
+    if (text === '0') {
+
+
+        const segments = currentDisplay.split(/[\+\-\×÷]/); // Split by operators
+        const lastSegment = segments[segments.length - 1];
+
+        // Case 1: If there's at least one number (1-9) in the display, allow multiple zeros
+        if (/[1-9]/.test(lastSegment)) {
+            displayScreen.innerHTML = currentDisplay + text + cursor.outerHTML;
+            return;
+        }
+
+        // Case 2: If pressed after an operator, allow one zero
+        if (isOperator(lastChar)) {
+            displayScreen.innerHTML = currentDisplay + text + cursor.outerHTML;
+            return;
+        }
+
+        // Case 3: If there is a decimal point in the current segment, allow multiple zeros
+        if (lastSegment.includes('.')) {
+            displayScreen.innerHTML = currentDisplay + text + cursor.outerHTML;
+            return;
+        }
+
+        // Case 4: If there's only a single zero (no numbers before it), ignore additional zeros
+        if (lastSegment === '0' || (lastChar === '0' && !/[1-9]/.test(lastSegment))) {
+            return;
+        }
+    }
+
+
+    if (isNumber(text)) {
+        const segments = currentDisplay.split(/[\+\-\×÷]/); // Split by operators
+        const lastSegment = segments[segments.length - 1];
+        // Case 5: Replace a single leading zero with the number
+        if (lastSegment === '0') {
+            displayScreen.innerHTML = currentDisplay.slice( 0 , -1 )+ text + cursor.outerHTML;
+            return;
+        }
+    }
+   
 
     // Condition 1: Cannot start with an operator
     if (currentDisplay === '' && isOperator(text)) {
@@ -142,12 +186,11 @@ function updateDisplay(text) {
     
     // +/- button logic
     if (text === '+/-') {
-        // Get current display text without the cursor
+        // Get the current display text without the cursor
         const currentDisplay = displayScreen.innerText.replace('|', '');
-        
-        // If display is empty, add "(-" and increment counter
+
+        // If display is empty, add "(-" and increment the counter
         if (currentDisplay === '') {
-            // Add "(-" if the display is empty
             displayScreen.innerHTML = '(-' + cursor.outerHTML;
             openParenthesesCount++;
             totalOpenParenthesesCount++;
@@ -155,8 +198,29 @@ function updateDisplay(text) {
         }
 
         const lastChar = currentDisplay[currentDisplay.length - 1];
-        const segments = currentDisplay.split(/(?=[\+\-\×÷\(\)])/);
+
+        // Split the display into segments based on operators and parentheses
+        const segments = [];
+        let currentSegment = '';
+        for (let i = 0; i < currentDisplay.length; i++) {
+            const char = currentDisplay[i];
+            if ('+-×÷()'.includes(char)) {
+                if (currentSegment) {
+                    segments.push(currentSegment);
+                    currentSegment = '';
+                }
+                segments.push(char);
+            } else {
+                currentSegment += char;
+            }
+        }
+        if (currentSegment) {
+            segments.push(currentSegment);
+        }
+
         const lastSegment = segments[segments.length - 1];
+        const beforeLastSegment = segments[segments.length - 2];
+        const beforeBeforeLastSegment = segments[segments.length - 3];
 
         // Case 1: If "(-" exists at the end, remove it
         if (currentDisplay.endsWith('(-')) {
@@ -166,25 +230,20 @@ function updateDisplay(text) {
             return;
         }
 
-        // Case 2: If last segment starts with "(-", remove it
-        if (lastSegment.startsWith('(-')) {
-            segments[segments.length - 1] = lastSegment.slice(2);
+        // Case 2: If the last segment starts with "(-", remove it
+        if (
+            beforeLastSegment === '-' &&
+            beforeBeforeLastSegment === '(' &&
+            /^[0-9]+$/.test(lastSegment)
+        ) {
+            segments.splice(-3, 2);
             displayScreen.innerHTML = segments.join('') + cursor.outerHTML;
             openParenthesesCount--;
             totalOpenParenthesesCount--;
             return;
         }
 
-        // Case 3: Simple number negation - add "(-"
-        if (/^-?\d+\.?\d*$/.test(lastSegment)) {
-            segments[segments.length - 1] = '(-' + lastSegment;
-            displayScreen.innerHTML = segments.join('') + cursor.outerHTML;
-            openParenthesesCount++;
-            totalOpenParenthesesCount++;
-            return;
-        }
-
-        // Case 4: After an operator, add negative sign
+        // Case 3: After an operator, add a negative sign
         if (isOperator(lastChar)) {
             displayScreen.innerHTML = currentDisplay + '(-' + cursor.outerHTML;
             openParenthesesCount++;
@@ -192,23 +251,64 @@ function updateDisplay(text) {
             return;
         }
 
-        // Case 5: After a closing parenthesis, add multiplication by negative
+        // Case 4: Handle numbers by adding "(-" after the last operator
+        const isNumber = /^[+-]?\d+(\.\d+)?$/.test(lastSegment);
+        if (isNumber) {
+            const operatorIndex = segments.findLastIndex(seg =>
+                ['+', '-', '×', '÷', '('].includes(seg)
+            );
+
+            if (operatorIndex !== -1) {
+                // Insert "(-" after the last operator
+                segments.splice(operatorIndex + 1, 0, '(-');
+            } else {
+                // If no operator is found, add at the beginning
+                segments.unshift('(-');
+            }
+
+            displayScreen.innerHTML = segments.join('') + cursor.outerHTML;
+            openParenthesesCount++;
+            totalOpenParenthesesCount++;
+            return;
+        }
+
+        // Case 5: Handle complex parenthetical expressions
+        const openParenCount = (currentDisplay.match(/\(/g) || []).length;
+        const closeParenCount = (currentDisplay.match(/\)/g) || []).length;
+
+        if (openParenCount > closeParenCount) {
+            const lastOpenParenIndex = currentDisplay.lastIndexOf('(');
+
+            if (lastOpenParenIndex !== -1) {
+                if (currentDisplay.slice(lastOpenParenIndex + 1).includes('-')) {
+                    // Remove the "(-" from the last unclosed parenthesis segment
+                    segments.splice(lastOpenParenIndex, 2);
+                    displayScreen.innerHTML = segments.join('') + cursor.outerHTML;
+                    openParenthesesCount--;
+                    totalOpenParenthesesCount--;
+                } else {
+                    // Add "(-" after the last unclosed parenthesis
+                    const newDisplay =
+                        currentDisplay.slice(0, lastOpenParenIndex + 1) +
+                        '(-' +
+                        currentDisplay.slice(lastOpenParenIndex + 1);
+                    displayScreen.innerHTML = newDisplay + cursor.outerHTML;
+                    openParenthesesCount++;
+                    totalOpenParenthesesCount++;
+                }
+                return;
+            }
+        }
+
+        // Case 6: After a closing parenthesis, add multiplication by a negative sign
         if (lastChar === ')') {
             displayScreen.innerHTML = currentDisplay + '×(-' + cursor.outerHTML;
             openParenthesesCount++;
             totalOpenParenthesesCount++;
             return;
         }
-
-        // Case 6: Default case - do nothing
-        return;
-
-        /*
-            when a number start with a (- sign, it means that the number is negative, and if the user click on the +/- button again, it should remove the (- sign and make the number positive again. not add another "(-".
-            when a number at the last segment is positiv without a sign, and the user click on the +/- button, it should add a (- sign after the last operator (before the number).
-            when an arethmetic operation like ((88+6 is done and the user click on the +/- button, it should add a (- sign after the last "(" opened (before the operation) so it would be (((-88+6. and if pressed again, it should remove the (- sign and make it positive again "((88+6".
-        */
     }
+
     
     
     
@@ -260,7 +360,7 @@ function changeParenthesisColor(display) {
 
 
 // Select all calculator buttons with classes 'num' or 'op' only
-const buttons = document.querySelectorAll('#buttons .num, #buttons .op, #buttons .action, #buttons #fassila');
+const buttons = document.querySelectorAll('#buttons .num, #buttons .op, #buttons .action');
 
 // Add event listener to each button
 buttons.forEach(button => {
