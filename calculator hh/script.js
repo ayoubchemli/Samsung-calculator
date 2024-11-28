@@ -102,6 +102,11 @@ function updateDisplay(text) {
         return; // Do nothing if trying to add an operator at the beginning
     }
 
+    // condition : Cannot start with an operator after a parentheses
+    if (currentDisplay[currentDisplay.length - 1] === '(' && isOperator(text)) {
+        return; // Do nothing if trying to add an operator after a parentheses
+    }
+
     // Condition 2: If the last character is an operator, replace it with the new operator
     if (isOperator(currentDisplay[currentDisplay.length - 1]) && isOperator(text)) {
         displayScreen.innerHTML = currentDisplay.slice(0, -1) + text + cursor.outerHTML;
@@ -222,6 +227,14 @@ function updateDisplay(text) {
         const beforeLastSegment = segments[segments.length - 2];
         const beforeBeforeLastSegment = segments[segments.length - 3];
 
+        // Case 6: After a closing parenthesis, add multiplication by a negative sign
+        if (lastChar === ')') {
+            displayScreen.innerHTML = currentDisplay + '×(-' + cursor.outerHTML;
+            openParenthesesCount++;
+            totalOpenParenthesesCount++;
+            return;
+        }
+
         // Case 1: If "(-" exists at the end, remove it
         if (currentDisplay.endsWith('(-')) {
             displayScreen.innerHTML = currentDisplay.slice(0, -2) + cursor.outerHTML;
@@ -300,14 +313,47 @@ function updateDisplay(text) {
             }
         }
 
-        // Case 6: After a closing parenthesis, add multiplication by a negative sign
-        if (lastChar === ')') {
-            displayScreen.innerHTML = currentDisplay + '×(-' + cursor.outerHTML;
-            openParenthesesCount++;
-            totalOpenParenthesesCount++;
+        
+    }
+
+    // Handle "=" for evaluation
+    if (text === '=') {
+        // Get the current display content without the cursor
+        const currentDisplay = displayScreen.innerText.replace('|', '');
+        
+        // If the display is empty or ends with an operator, ignore the "=" press
+        const isOperator = (char) => ['+', '-', '×', '÷'].includes(char);
+        const lastChar = currentDisplay[currentDisplay.length - 1];
+        if (currentDisplay === '' || isOperator(lastChar) || lastChar === '(' || lastChar === '.') {
             return;
         }
+
+        // Replace display operators with JavaScript-compatible ones
+        let expression = currentDisplay
+            .replace(/×/g, '*')
+            .replace(/÷/g, '/')
+            .replace(/%/g, '/100');
+
+        // Handle parentheses mismatch (auto-close any unclosed opening parentheses)
+        const openParenthesesCount = (expression.match(/\(/g) || []).length;
+        const closeParenthesesCount = (expression.match(/\)/g) || []).length;
+        if (openParenthesesCount > closeParenthesesCount) {
+            expression += ')'.repeat(openParenthesesCount - closeParenthesesCount);
+        }
+
+        try {
+            // Evaluate the expression
+            const result = eval(expression);
+
+            // Display the result with cursor
+            displayScreen.innerHTML = result + cursor.outerHTML;
+        } catch (error) {
+            // If the expression is invalid, show an error
+            displayScreen.innerHTML = 'Error' + cursor.outerHTML;
+        }
+        return;
     }
+
 
     
     
@@ -359,7 +405,7 @@ function changeParenthesisColor(display) {
 }
 
 
-// Select all calculator buttons with classes 'num' or 'op' only
+// Select all calculator buttons with classes 
 const buttons = document.querySelectorAll('#buttons .num, #buttons .op, #buttons .action');
 
 // Add event listener to each button
