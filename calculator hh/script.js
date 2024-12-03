@@ -36,7 +36,7 @@ function updateDisplay(text) {
         if (isOperator(lastChar) || lastChar === '(' || lastChar === '%') return;
 
         // Can only add after numbers or decimal point
-        if (!isNumber(lastChar) && lastChar !== '.') return;
+        if (!isNumber(lastChar) && lastChar !== '.' && lastChar !== ')') return;
 
         // Check if there's already a percentage in the current segment
         const segments = currentDisplay.split(/[\+\-\×÷]/);
@@ -316,47 +316,155 @@ function updateDisplay(text) {
         
     }
 
-    // Handle "=" for evaluation
+
+    const safeEval = (expr) => {
+        // Remove any potential harmful characters and whitespace
+        expr = expr.replace(/[^-()\d/*+.]/g, '');
+    
+        // Function to determine the maximum decimal precision
+        const getDecimalPrecision = (num) => {
+            const decimalPart = Math.abs(num).toString().split('.')[1];
+            return decimalPart ? decimalPart.length : 0;
+        };
+    
+        // Function to perform precise calculations
+        const preciseCalculate = (a, op, b) => {
+            // Determine the maximum decimal places
+            const precisionA = getDecimalPrecision(a);
+            const precisionB = getDecimalPrecision(b);
+            const maxPrecision = Math.max(precisionA, precisionB);
+    
+            // Convert to integers for precise calculation
+            const multiplier = Math.pow(10, maxPrecision);
+            const intA = Math.round(a * multiplier);
+            const intB = Math.round(b * multiplier);
+    
+            let result;
+            switch (op) {
+                case '+': 
+                    result = (intA + intB) / multiplier;
+                    break;
+                case '-': 
+                    result = (intA - intB) / multiplier;
+                    break;
+                case '*': 
+                    result = (intA * intB) / (multiplier * multiplier);
+                    break;
+                case '/': 
+                    // Handle division by zero
+                    if (intB === 0) throw new Error('Division by zero');
+                    result = (intA / intB);
+                    break;
+                default: 
+                    throw new Error('Invalid operator');
+            }
+    
+            // Round to handle floating-point imprecision
+            return Number(result.toFixed(10));
+        };
+    
+        // Remove whitespace
+        expr = expr.replace(/\s+/g, '');
+    
+        // Parentheses handling
+        while (expr.includes('(')) {
+            const parenthesisRegex = /\(([^()]+)\)/;
+            expr = expr.replace(parenthesisRegex, (match, contents) => {
+                return safeEval(contents).toString();
+            });
+        }
+    
+        // Multiplication and Division (left to right)
+        const multiplyDivideRegex = /(-?(?:\d+\.?\d*))([*/])(-?(?:\d+\.?\d*))/;
+        while (/[*/]/.test(expr)) {
+            expr = expr.replace(multiplyDivideRegex, (match, a, op, b) => {
+                const result = preciseCalculate(parseFloat(a), op, parseFloat(b));
+                return result.toString();
+            });
+        }
+    
+        // Addition and Subtraction (left to right)
+        const addSubtractRegex = /(-?(?:\d+\.?\d*))([+-])(-?(?:\d+\.?\d*))/;
+        while (/[+-]/.test(expr)) {
+            expr = expr.replace(addSubtractRegex, (match, a, op, b) => {
+                const result = preciseCalculate(parseFloat(a), op, parseFloat(b));
+                return result.toString();
+            });
+        }
+    
+        return parseFloat(expr);
+    };
+    
     if (text === '=') {
         // Get the current display content without the cursor
         const currentDisplay = displayScreen.innerText.replace('|', '');
         
-        // If the display is empty or ends with an operator, ignore the "=" press
-        const isOperator = (char) => ['+', '-', '×', '÷'].includes(char);
-        const lastChar = currentDisplay[currentDisplay.length - 1];
-        if (currentDisplay === '' || isOperator(lastChar) || lastChar === '(' || lastChar === '.') {
+        // Handle empty display
+        if (!currentDisplay || currentDisplay.trim() === '') {
             return;
         }
-
-        // Replace display operators with JavaScript-compatible ones
-        let expression = currentDisplay
-            .replace(/×/g, '*')
-            .replace(/÷/g, '/')
-            .replace(/%/g, '/100');
-
-        // Handle parentheses mismatch (auto-close any unclosed opening parentheses)
-        const openParenthesesCount = (expression.match(/\(/g) || []).length;
-        const closeParenthesesCount = (expression.match(/\)/g) || []).length;
-        if (openParenthesesCount > closeParenthesesCount) {
-            expression += ')'.repeat(openParenthesesCount - closeParenthesesCount);
+        
+        // Check for invalid endings
+        const isOperator = (char) => ['+', '-', '×', '÷'].includes(char);
+        const lastChar = currentDisplay[currentDisplay.length - 1];
+        if (isOperator(lastChar) || lastChar === '(' || lastChar === '.') {
+            // If ends with an operator or invalid character, remove it
+            const cleanedDisplay = currentDisplay.slice(0, -1);
+            displayScreen.innerHTML = cleanedDisplay + cursor.outerHTML;
+            return;
         }
-
+    
         try {
-            // Evaluate the expression
-            const result = eval(expression);
+            
+            // Convert operators and prepare expression
+            let expression = currentDisplay
+                .replace(/×/g, '*')   
+                .replace(/÷/g, '/')   
+                .replace(/%/g, '/100');
+    
+            // Handle parentheses
+            const openCount = (expression.match(/\(/g) || []).length;
+            const closeCount = (expression.match(/\)/g) || []).length;
 
-            // Display the result with cursor
-            displayScreen.innerHTML = result + cursor.outerHTML;
+            if (openCount > closeCount) {
+                expression += ')'.repeat(openCount - closeCount);
+            }
+
+            // Check for division by zero again in case it's in a more complex expression
+            if (/\/0(?![.]|\d)/.test(expression)) {
+                const errorPopup = document.getElementById('error-popup');
+
+                function showErrorPopup(message) {
+                    errorPopup.innerText = message;
+                    errorPopup.classList.remove('hidden');
+                    errorPopup.classList.add('show');
+
+                    // Hide the popup after 2 seconds
+                    setTimeout(() => {
+                        errorPopup.classList.remove('show');
+                        errorPopup.classList.add('hidden');
+                    }, 2000);
+                }
+
+                showErrorPopup("Can't divide by zero");
+                return;
+            }
+    
+            // Calculate result using safeEval
+            const result = safeEval(expression);
+
+            
+            const formattedResult = Number.isFinite(result) 
+                ? Number(result.toFixed(10)).toString().slice(0, 15)
+                : 'Error';
+            
+            displayScreen.innerHTML = formattedResult + cursor.outerHTML;
         } catch (error) {
-            // If the expression is invalid, show an error
+            // Handle any unexpected errors
             displayScreen.innerHTML = 'Error' + cursor.outerHTML;
         }
         return;
     }
-
-
-    
-    
     
 
     // Append new text to the display
