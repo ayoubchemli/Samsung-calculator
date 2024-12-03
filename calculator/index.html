@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculator</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+
+    <!-- Container for Display Screen and Delete Button -->
+    <div id="display-container">
+        <div id="display-screen"> 
+            <span id="cursor"></span> <!-- Green cursor inside display -->
+        </div>
+        <div id="error-popup" class="hidden">Can't divide by zero.</div>
+        <button id="deleteP"></button>
+    </div>
+
+    <div id="buttons">
+        <button id="delete">C</button>
+        <button id="9aws" class="op">()</button>
+        <button id="pourcentage" class="op">%</button>
+        <button id="div" class="op">÷</button>
+        <button id="7" class="num">7</button>
+        <button id="8" class="num">8</button>
+        <button id="9" class="num">9</button>
+        <button id="mul" class="op">×</button>
+        <button id="4" class="num">4</button>
+        <button id="5" class="num">5</button>
+        <button id="6" class="num">6</button>
+        <button id="sub" class="op">-</button>
+        <button id="1" class="num">1</button>
+        <button id="2" class="num">2</button>
+        <button id="3" class="num">3</button>
+        <button id="add" class="op">+</button>
+        <button id="plusmin" class="action">+/-</button>
+        <button id="0" class="num">0</button>
+        <button id="fassila" class="action">.</button>
+        <button id="equal"  class="action">=</button>
+    </div>
+
+</body>
+</html>
