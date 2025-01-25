@@ -2,7 +2,7 @@
 
 A sleek and modern calculator application inspired by the Samsung Calculator. This project replicates the functionality and design of the Samsung Calculator, offering a user-friendly interface with advanced features like parentheses, percentage calculations, and error handling.
 
-![Calculator Screenshot](calculator/calculator-screenshot.png)
+![Calculator Screenshot](calculator/screenshot.png)
 
 ## Features
 
